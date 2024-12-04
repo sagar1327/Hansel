@@ -3,7 +3,7 @@
 import rospy
 import numpy as np
 from sensor_msgs.msg import Image, CompressedImage
-from hansel.msg import UavPosition
+from geometry_msgs.msg import PoseStamped
 import cv2 as cv
 from cv_bridge import CvBridge
 
@@ -14,7 +14,7 @@ class LocalizeUAV():
         rospy.init_node("localize_uav", anonymous=True)
         self.thermal_img_msg = Image()
         self.bridge = CvBridge()
-        self.uav_position_msg = UavPosition()
+        self.uav_position_msg = PoseStamped()
         self.img_width = 160
         self.img_height = 120
         self.uav_height = 1300.75
@@ -26,7 +26,7 @@ class LocalizeUAV():
 
         rospy.Subscriber("/kevin/camera/rgb/image_raw", Image, callback=self.thermal_img)
         self.thermal_img_pub = rospy.Publisher("/sentinel/thermal/rgb/image_raw", Image, queue_size=1)
-        self.uav_position_pub = rospy.Publisher("/sentinel/position/global", UavPosition, queue_size=1)
+        self.uav_position_pub = rospy.Publisher("/sentinel/position/global", PoseStamped, queue_size=1)
         
         rospy.spin()
 
@@ -49,6 +49,13 @@ class LocalizeUAV():
             cv.circle(thermal_img_cv,(int(np.round(center[0])), int(np.round(center[1]))),1,(255,0,0),1)
 
             global_x, global_y = self.calulate_position(center)
+
+            self.uav_position_msg.header.stamp = rospy.Time.now()
+            self.uav_position_msg.header.frame_id = "map"
+            self.uav_position_msg.pose.position.x = global_x
+            self.uav_position_msg.pose.position.y = global_y
+            self.uav_position_pub.publish(self.uav_position_msg)
+            
         else:
             print("No marker.")
 
@@ -56,12 +63,6 @@ class LocalizeUAV():
         self.thermal_img_msg.header.frame_id = "map"
         self.thermal_img_msg = self.bridge.cv2_to_imgmsg(thermal_img_cv, "bgr8")
         self.thermal_img_pub.publish(self.thermal_img_msg)
-
-        self.uav_position_msg.header.stamp = rospy.Time.now()
-        self.uav_position_msg.header.frame_id = "map"
-        self.uav_position_msg.x = global_x
-        self.uav_position_msg.y = global_y
-        self.uav_position_pub.publish(self.uav_position_msg)
 
         print(f"X Position: {global_x}, Y Position: {global_y}")
 
