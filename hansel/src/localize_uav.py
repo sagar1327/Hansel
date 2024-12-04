@@ -3,6 +3,7 @@
 import rospy
 import numpy as np
 from sensor_msgs.msg import Image, CompressedImage
+from hansel.msg import UavPosition
 import cv2 as cv
 from cv_bridge import CvBridge
 
@@ -13,6 +14,7 @@ class LocalizeUAV():
         rospy.init_node("localize_uav", anonymous=True)
         self.thermal_img_msg = Image()
         self.bridge = CvBridge()
+        self.uav_position_msg = UavPosition()
         self.img_width = 160
         self.img_height = 120
         self.uav_height = 1300.75
@@ -23,7 +25,8 @@ class LocalizeUAV():
         self.initial_y = None
 
         rospy.Subscriber("/kevin/camera/rgb/image_raw", Image, callback=self.thermal_img)
-        self.thermal_img_pub = rospy.Publisher("/Sentinel/thermal/rgb/image_raw", Image, queue_size=1)
+        self.thermal_img_pub = rospy.Publisher("/sentinel/thermal/rgb/image_raw", Image, queue_size=1)
+        self.uav_position_pub = rospy.Publisher("/sentinel/position/global", UavPosition, queue_size=1)
         
         rospy.spin()
 
@@ -45,10 +48,22 @@ class LocalizeUAV():
             center = [xg + wg / 2, yg + hg / 2]
             cv.circle(thermal_img_cv,(int(np.round(center[0])), int(np.round(center[1]))),1,(255,0,0),1)
 
-            self.calulate_position(center)
+            global_x, global_y = self.calulate_position(center)
+        else:
+            print("No marker.")
 
+        self.thermal_img_msg.header.stamp = rospy.Time.now()
+        self.thermal_img_msg.header.frame_id = "map"
         self.thermal_img_msg = self.bridge.cv2_to_imgmsg(thermal_img_cv, "bgr8")
         self.thermal_img_pub.publish(self.thermal_img_msg)
+
+        self.uav_position_msg.header.stamp = rospy.Time.now()
+        self.uav_position_msg.header.frame_id = "map"
+        self.uav_position_msg.x = global_x
+        self.uav_position_msg.y = global_y
+        self.uav_position_pub.publish(self.uav_position_msg)
+
+        print(f"X Position: {global_x}, Y Position: {global_y}")
 
     def calulate_position(self, center):
         apx = self.HFOV/self.img_width
@@ -81,7 +96,7 @@ class LocalizeUAV():
         global_x = self.initial_x - self.current_deltaS*np.cos(theta_horizontal)
         global_y = self.initial_y - self.current_deltaS*np.sin(theta_horizontal)
 
-        print(f"X Position: {global_x}, Y Position: {global_y}")
+        return global_x, global_y
 
 
 if __name__ == "__main__":
